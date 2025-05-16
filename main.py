@@ -5,12 +5,11 @@ from datetime import datetime
 
 import pika
 
-# Глобальные переменные
 events = {}
 current_year = datetime.now().year
 current_month = datetime.now().month
 highlight_color = curses.COLOR_CYAN
-view_mode = "month"  # "month" или "year"
+view_mode = "month"
 day_positions = []
 calc_input = ""
 event_page = 0
