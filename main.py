@@ -2,7 +2,6 @@ import curses
 import calendar
 import json
 from datetime import datetime
-import os
 
 import pika
 
@@ -19,8 +18,6 @@ event_page = 0
 buttons = [
     ("Добавить", "add"),
     ("Удалить", "delete"),
-    ("Сохранить", "save"),
-    ("Загрузить", "load"),
     ("Цвет", "color"),
     ("Сбросить события", "clear"),
     ("Выход", "quit")
@@ -76,16 +73,13 @@ def draw_buttons(button_win):
         x = (button_win_width - len(text)) // 2
         button_win.addstr(y, x, text)
 
-    # Рисуем калькулятор ниже
     calc_start_y = 2 + len(buttons) * 3 + 2
     button_win.addstr(calc_start_y, 2, "Калькулятор", curses.A_BOLD)
 
-    # Рамка ввода
     button_win.addstr(calc_start_y + 1, 1, "+" + "-" * (button_win_width - 4) + "+")
     button_win.addstr(calc_start_y + 2, 1, "|" + calc_input.center(button_win_width - 4) + "|")
     button_win.addstr(calc_start_y + 3, 1, "+" + "-" * (button_win_width - 4) + "+")
 
-    # Клавиши калькулятора
     for row_idx, row in enumerate(calc_keys):
         for col_idx, key in enumerate(row):
             if key:
@@ -211,7 +205,7 @@ def draw_calendar(cal_win, year, month):
     cal_win.refresh()
 
 def draw_upcoming_events(event_win, year, month):
-    global event_page  # чтобы видеть и менять текущую страницу
+    global event_page
 
     event_win.erase()
     event_win.box()
@@ -232,7 +226,6 @@ def draw_upcoming_events(event_win, year, month):
     def hline():
         return "+" + "-" * col_day_width + "+" + "-" * col_time_width + "+" + "-" * col_title_width + "+"
 
-    # Собираем все события
     upcoming = []
     for date_str in sorted(events.keys()):
         event_date = datetime.strptime(date_str, "%Y-%m-%d")
@@ -240,11 +233,9 @@ def draw_upcoming_events(event_win, year, month):
             for event in sorted(events[date_str], key=lambda e: e['time']):
                 upcoming.append((f"{event_date.day} {calendar.month_abbr[event_date.month]}", event['time'], event['title']))
 
-    # Разбиваем на страницы
-    events_per_page = (win_height - 8) * num_columns  # -8 чтобы оставить место под номер страницы
+    events_per_page = (win_height - 8) * num_columns
     total_pages = max(1, (len(upcoming) + events_per_page - 1) // events_per_page)
 
-    # Корректируем номер страницы
     if event_page >= total_pages:
         event_page = total_pages - 1
     if event_page < 0:
@@ -258,7 +249,6 @@ def draw_upcoming_events(event_win, year, month):
     start_x = start_x_list[current_x_idx]
     line_start = line
 
-    # Вывод заголовков
     event_win.addstr(line, start_x, hline())
     line += 1
     header = "|" + "День".center(col_day_width) + "|" + "Время".center(col_time_width) + "|" + "Описание".center(col_title_width) + "|"
@@ -269,14 +259,13 @@ def draw_upcoming_events(event_win, year, month):
 
     # Рисуем события
     for day_month, time, title in page_upcoming:
-        if line >= win_height - 5:  # -5 чтобы не забить место под номер страницы
+        if line >= win_height - 5:
             current_x_idx += 1
             if current_x_idx >= len(start_x_list):
                 break
             start_x = start_x_list[current_x_idx]
             line = line_start
 
-            # Заголовок новой колонки
             event_win.addstr(line, start_x, hline())
             line += 1
             event_win.addstr(line, start_x, header)
@@ -288,11 +277,9 @@ def draw_upcoming_events(event_win, year, month):
         event_win.addstr(line, start_x, row)
         line += 1
 
-    # Закрывающая линия таблицы
     if line < win_height - 5:
         event_win.addstr(line, start_x, hline())
 
-    # --- Новое: отображение номера страницы внизу окна ---
     page_info = f"Страница {event_page + 1} из {total_pages}"
     event_win.addstr(win_height - 2, (win_width - len(page_info)) // 2, page_info, curses.A_BOLD)
 
@@ -336,32 +323,6 @@ def delete_event(year, month, day, msg_win):
     else:
         show_message(msg_win, f"На {date_str} событий нет.")
 
-def save_events():
-    try:
-        with open("events.json", "w") as f:
-            json.dump(events, f, indent=2)
-    except Exception:
-        pass
-
-def load_events(msg_win, filename="events.json"):
-    global events
-    try:
-        if not os.path.exists(filename):
-            show_message(msg_win, f"Файл '{filename}' не найден.")
-            return
-
-        with open(filename, "r") as f:
-            data = json.load(f)
-            if not isinstance(data, dict):
-                show_message(msg_win, "Формат файла неправильный.")
-                return
-
-        events = data
-        show_message(msg_win, f"События загружены из '{filename}'.")
-    except Exception as e:
-        show_message(msg_win, f"Ошибка загрузки: {str(e)}")
-
-
 def input_string(stdscr, prompt):
     h, w = stdscr.getmaxyx()
     width = min(w - 10, 60)
@@ -404,7 +365,6 @@ def setup_rabbitmq():
     rabbit_channel.queue_declare(queue=RABBIT_QUEUE, durable=True)
     rabbit_channel.queue_bind(queue=RABBIT_QUEUE, exchange=RABBIT_EXCHANGE, routing_key='#')
 
-    # Загрузка входящих событий
     for method_frame, properties, body in rabbit_channel.consume(RABBIT_QUEUE, inactivity_timeout=1):
         if body is None:
             break
@@ -519,11 +479,6 @@ def main(stdscr):
                             elif action == "delete":
                                 day = int(input_string(stdscr, "Введите день: "))
                                 delete_event(current_year, current_month, day, msg_win)
-                            elif action == "save":
-                                save_events()
-                                show_message(msg_win, "События сохранены.")
-                            elif action == "load":
-                                load_events(msg_win)
                             elif action == "color":
                                 highlight_color = (highlight_color + 1) % 8 or 1
                             elif action == "clear":
@@ -532,10 +487,9 @@ def main(stdscr):
                             elif action == "quit":
                                 break
 
-                    # --- Клик по калькулятору
-                    calc_start_y = 2 + len(buttons) * 3 + 2 + 3  # начальная координата Y блока калькулятора
+                    calc_start_y = 2 + len(buttons) * 3 + 2 + 3
                     if mx >= w - 34 and my >= calc_start_y:
-                        relative_x = mx - (w - 34)  # координата X относительно окна кнопок
+                        relative_x = mx - (w - 34)
                         col = (relative_x - 2) // 8
                         row = (my - calc_start_y) // 2
                         if 0 <= row < len(calc_keys) and 0 <= col < len(calc_keys[0]):
